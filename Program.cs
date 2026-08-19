@@ -7,6 +7,9 @@ var app = builder.Build();
 
 
 string connString = "Server=localhost;Database=shortener_db;User=root;Password=Arya@2005;";
+
+
+
 int count = 0;
 DateTime resetTime = DateTime.Now.AddMinutes(1);
 
@@ -37,6 +40,19 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+app.MapGet("/popular", async()=>{
+    using var db = new MySqlConnection(connString);
+    var popularUrls = await db.QueryFirstAsync("SELECT ShortCode, OriginalUrl, Clicks FROM urls ORDER BY Clicks DESC LIMIT 5");
+
+    return Results.Ok(popularUrls);
+
+
+});
+
+
+
+
 
 
 
