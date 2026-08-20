@@ -1,0 +1,27 @@
+# UrlShortener
+
+A containerized REST API for shortening URLs, built with ASP.NET Core, MySQL, and Redis. It uses a read-aside caching pattern to serve redirected links with low latency and offload queries from the primary database.
+
+## Architecture & Tech Stack
+
+* **Framework:** ASP.NET Core (.NET 10)
+* **Database:** MySQL 8.0 (Persistent storage for mappings)
+* **Cache:** Redis Alpine (In-memory storage for hot key lookups)
+* **Containerization:** Docker & Docker Compose
+
+### Request Flow
+1. **GET /{code}:** The application checks Redis for the shortened code.
+2. **Cache Hit:** Immediately redirects to the target URL.
+3. **Cache Miss:** Queries MySQL, hydrates the Redis cache for future requests, and executes the redirect.
+
+## Getting Started
+
+### Prerequisites
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+
+### Running Locally
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/your-username/UrlShortener.git](https://github.com/your-username/UrlShortener.git)
+   cd UrlShortener
