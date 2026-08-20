@@ -1,8 +1,27 @@
 using Dapper;
 using MySqlConnector;
+using Microsoft.AspNetCore.RateLimiting;
+
+
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("fixed", opt =>
+    {
+        opt.PermitLimit = 10000;
+        opt.Window = TimeSpan.FromSeconds(10);
+       
+    });
+    
+
+
+});
 var app = builder.Build();
+
+
+
 
 
 
@@ -10,40 +29,13 @@ string connString = "Server=localhost;Database=shortener_db;User=root;Password=A
 
 
 
-int count = 0;
-DateTime resetTime = DateTime.Now.AddMinutes(1);
 
-app.Use(async (context, next) =>
-{
-    if(context.Request.Path == "/shorten" && context.Request.Method == "POST")
-    {
+app.UseRateLimiter();
 
-        if(DateTime.Now>= resetTime)
-        {
-            count = 0;
-            resetTime = DateTime.Now.AddMinutes(1);
-        }
-        if(count >= 3)
-        {
-
-            context.Response.StatusCode = 429;
-            
-
-            return;
-
-            
-
-        }
-        count++;
-        
-    }
-
-    await next();
-});
 
 app.MapGet("/popular", async()=>{
     using var db = new MySqlConnection(connString);
-    var popularUrls = await db.QueryFirstAsync("SELECT ShortCode, OriginalUrl, Clicks FROM urls ORDER BY Clicks DESC LIMIT 5");
+    var popularUrls = await db.QueryAsync("SELECT ShortCode, OriginalUrl, Clicks FROM urls ORDER BY Clicks DESC LIMIT 5");
 
     return Results.Ok(popularUrls);
 
@@ -65,7 +57,7 @@ app.MapGet("/stats/{code}",async  (string code) =>
 
 {
     using var db = new MySqlConnection(connString);
-     var clicks = await db.QueryFirstOrDefaultAsync<int?>($"SELECT Clicks FROM urls WHERE ShortCode = '{code}'");
+     var clicks = await db.QueryFirstOrDefaultAsync<int?>($"SELECT Clicks FROM urls WHERE ShortCode = @code", new { code });
 
     if(clicks is null )
     {
@@ -80,18 +72,18 @@ app.MapPost("/shorten",async(string url) =>
 
     var code = Guid.NewGuid().ToString()[..6];
     using var db = new MySqlConnection(connString);
-    await db.ExecuteAsync($"INSERT INTO urls (ShortCode, OriginalUrl) VALUES ('{code}', '{url}')");
+    await db.ExecuteAsync($"INSERT INTO urls (ShortCode, OriginalUrl) VALUES (@code, @url)", new { code, url });
 
     return Results.Ok(new{shortCode = code, originalUrl = url});
-});
+}).RequireRateLimiting("fixed");
 
 app.MapGet("/{code}", async (string code) =>
 {
     using var db = new MySqlConnection(connString);
-    var OriginalUrl  = await db.QueryFirstOrDefaultAsync<string>($"SELECT OriginalUrl FROM urls WHERE ShortCode = '{code}'");
+    var OriginalUrl  = await db.QueryFirstOrDefaultAsync<string>($"SELECT OriginalUrl FROM urls WHERE ShortCode = @code", new { code });
     if(OriginalUrl is not null){
 
-        await db.ExecuteAsync($"UPDATE urls SET clicks = clicks + 1 WHERE ShortCode = '{code}'");
+        await db.ExecuteAsync($"UPDATE urls SET clicks = clicks + 1 WHERE ShortCode = @code", new { code });
 
         return Results.Redirect(OriginalUrl);
     }
