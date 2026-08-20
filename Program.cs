@@ -7,7 +7,8 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var redis = ConnectionMultiplexer.Connect("localhost:6379");
+var redisConnectionString = builder.Configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379";
+var redis = ConnectionMultiplexer.Connect(redisConnectionString);
 builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
 
 builder.Services.AddRateLimiter(options =>
@@ -29,7 +30,8 @@ var app = builder.Build();
 
 
 
-string connString = "Server=localhost;Database=shortener_db;User=root;Password=Arya@2005;Max Pool Size=200;Connection Timeout=120;";
+string connString = builder.Configuration.GetConnectionString("DefaultConnection") 
+    ?? "Server=localhost;Database=shortener_db;User=root;Password=Arya@2005;Max Pool Size=200;Connection Timeout=120;";
 
 
 
