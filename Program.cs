@@ -1,10 +1,14 @@
 using Dapper;
 using MySqlConnector;
 using Microsoft.AspNetCore.RateLimiting;
+using StackExchange.Redis;
 
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+var redis = ConnectionMultiplexer.Connect("localhost:6379");
+builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -69,6 +73,8 @@ app.MapGet("/stats/{code}",async  (string code) =>
 });
 app.MapPost("/shorten", async (string url) =>
 {
+
+    
     using var db = new MySqlConnection(connString);
     
     while (true)
@@ -87,18 +93,37 @@ app.MapPost("/shorten", async (string url) =>
     }
 }).RequireRateLimiting("fixed");
 
-app.MapGet("/{code}", async (string code) =>
+app.MapGet("/{code}", async (string code, IConnectionMultiplexer redisConn) =>
 {
+    var cache = redisConn.GetDatabase();
+
+    string? cachedthing = await cache.StringGetAsync(code);
+    if (cachedthing is not null)
+    {
+        
+        return Results.Redirect(cachedthing);
+    }
     using var db = new MySqlConnection(connString);
     var OriginalUrl  = await db.QueryFirstOrDefaultAsync<string>($"SELECT OriginalUrl FROM urls WHERE ShortCode = @code", new { code });
     if(OriginalUrl is not null){
 
         await db.ExecuteAsync($"UPDATE urls SET clicks = clicks + 1 WHERE ShortCode = @code", new { code });
+        await cache.StringSetAsync(code, OriginalUrl, TimeSpan.FromHours(1));
 
         return Results.Redirect(OriginalUrl);
     }
+    else
+    {
+         return Results.NotFound("Short Code Not Found");
+        
 
-    return Results.NotFound("Short Code Not Found");
+    }
+
+    
+
+   
+
+    
 
 
 });
