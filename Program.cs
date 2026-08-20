@@ -25,7 +25,7 @@ var app = builder.Build();
 
 
 
-string connString = "Server=localhost;Database=shortener_db;User=root;Password=Arya@2005;";
+string connString = "Server=localhost;Database=shortener_db;User=root;Password=Arya@2005;Max Pool Size=200;Connection Timeout=120;";
 
 
 
@@ -67,14 +67,24 @@ app.MapGet("/stats/{code}",async  (string code) =>
     return Results.Ok(new { shortCode = code, clicks = clicks });
 
 });
-app.MapPost("/shorten",async(string url) =>
+app.MapPost("/shorten", async (string url) =>
 {
-
-    var code = Guid.NewGuid().ToString()[..6];
     using var db = new MySqlConnection(connString);
-    await db.ExecuteAsync($"INSERT INTO urls (ShortCode, OriginalUrl) VALUES (@code, @url)", new { code, url });
-
-    return Results.Ok(new{shortCode = code, originalUrl = url});
+    
+    while (true)
+    {
+        var code = Guid.NewGuid().ToString("N")[..10];
+        try
+        {
+            await db.ExecuteAsync("INSERT INTO urls (ShortCode, OriginalUrl) VALUES (@code, @url)", new { code, url });
+            return Results.Ok(new { shortCode = code, originalUrl = url });
+        }
+        catch (MySqlException ex) when (ex.Number == 1062) 
+        {
+           
+            continue; 
+        }
+    }
 }).RequireRateLimiting("fixed");
 
 app.MapGet("/{code}", async (string code) =>
